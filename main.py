@@ -6,8 +6,7 @@ import sys
 
 # Get our model functions:
 from sdf_model import get_fc_model, get_fc_no_bn_model, get_fc_no_bn_dropout_model, get_fc_small_model, get_fc_no_bn_small_model
-from sdf_pointconv_deep_model import get_pointconv_deep_model, get_pointconv_deep_bn_model
-from sdf_pointconv_model import get_pointconv_model
+from sdf_pointconv_model import get_pointconv_deep_model, get_pointconv_deep_bn_model
 
 # Get running function.
 from run_sdf_model import run, extract_voxel
@@ -37,13 +36,14 @@ parser.set_defaults(training=True)
 # Data inputs.
 parser.add_argument('--train_path', type=str, help='Path to Training folder.', required=True)
 parser.add_argument('--validation_path', type=str, help='Path to Validation folder.', required=True)
-parser.add_argument('--pc_h5_file', type=str, help='Path to Point Cloud h5 file.')
 
 parser.add_argument('--alpha', type=float, help='Alpha for loss tradeoff between voxel and SDF.', default=0.5)
 parser.add_argument('--loss_function', type=str, help='Loss function to use.', default='mse')
 
 parser.add_argument('--voxelize', dest='voxelize', action='store_true', help='If should create a voxel.')
 parser.set_defaults(voxelize=False)
+parser.add_argument('--mesh', dest='mesh', action='store_true', help='If should mesh the voxelization.')
+parser.set_defaults(mesh=False)
 
 parser.add_argument('--sdf_count', type=int, help='Number of SDF points to run together for each example. Points are randomly down sampled to this count.', default=64)
 
@@ -69,10 +69,8 @@ elif model_ == 'fc_small':
 elif model_ == 'fc_small_no_bn':
    model_func = get_fc_no_bn_small_model
 elif model_ == 'pointconv':
-   model_func = get_pointconv_model
-elif model_ == 'pointconv_deep':
    model_func = get_pointconv_deep_model
-elif model_ == 'pointconv_deep_bn':
+elif model_ == 'pointconv_bn':
    model_func = get_pointconv_deep_bn_model   
     
 # Run!
@@ -93,4 +91,9 @@ if not args.voxelize:
        alpha=args.alpha,
        loss_function=args.loss_function)
 else:
-   extract_voxel(model_func, model_path=model_folder, loss_function=args.loss_function)
+   extract_voxel(get_model = model_func,
+                 model_path=model_folder,
+                 loss_function=args.loss_function,
+                 train_path=args.train_path,
+                 validation_path=args.validation_path,
+                 mesh=args.mesh)

@@ -53,7 +53,7 @@ def get_pointconv_deep_model(points, xyz, sdf_label, is_training, bn_decay, batc
     with tf.variable_scope('sdf'):
 
         # Combine embeddings. First reshape cloud embeddings to concat with each pt embedding.
-        cloud_embedding = tf.tile(tf.expand_dims(cloud_embedding,1), [1, 64, 1])
+        cloud_embedding = tf.tile(tf.expand_dims(cloud_embedding,1), [1, sdf_count, 1])
         embedded_inputs = tf.concat([pts_embedding, cloud_embedding], axis=2)
 
         # 8 Dense layers w/ ReLU non-linearities to predict SDF.
@@ -126,7 +126,7 @@ def get_pointconv_deep_bn_model(points, xyz, sdf_label, is_training, bn_decay, b
     with tf.variable_scope('sdf'):
 
         # Combine embeddings. First reshape cloud embeddings to concat with each pt embedding.
-        cloud_embedding = tf.tile(tf.expand_dims(cloud_embedding,1), [1, 64, 1])
+        cloud_embedding = tf.tile(tf.expand_dims(cloud_embedding,1), [1, sdf_count, 1])
         embedded_inputs = tf.concat([pts_embedding, cloud_embedding], axis=2)
 
         # 8 Dense layers w/ ReLU non-linearities to predict SDF.

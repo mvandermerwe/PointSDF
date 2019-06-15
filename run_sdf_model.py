@@ -1,5 +1,3 @@
-# Create PointNet2 + DeepSDF Estimator.
-
 from __future__ import print_function
 
 import tensorflow as tf
@@ -7,6 +5,7 @@ import numpy as np
 import sys
 import pdb
 import mcubes
+import trimesh
 import os
 import argparse
 
@@ -93,10 +92,6 @@ def run(get_model, train_path, validation_path, pc_h5_file, model_path, logs_pat
             print("Epoch: ", str(epoch))
 
             sess.run(train_iterator.initializer)
-            
-            pts = []
-            predictions = []
-            true = []
 
             # Track loss throughout updates.
             total_loss = 0.0
@@ -117,9 +112,13 @@ def run(get_model, train_path, validation_path, pc_h5_file, model_path, logs_pat
                         sdf_prediction_, loss_ = sess.run([sdf_prediction, loss], feed_dict = {
                             points: point_clouds_, xyz_in: xyzs_, sdf_labels: labels_, is_training: False,
                         })
-                    pts.append(xyzs_)
-                    predictions.append(sdf_prediction_)
-                    true.append(labels_)
+
+                        pts = np.reshape(xyzs_[0], (sdf_count, 3))
+                        truth = np.reshape(labels_[0], (sdf_count))
+                        pred = np.reshape(sdf_prediction_[0], (sdf_count))
+
+                        plot_3d_points(pts, truth)
+                        plot_3d_points(pts, pred)
 
                     total_loss += loss_
 
@@ -128,20 +127,20 @@ def run(get_model, train_path, validation_path, pc_h5_file, model_path, logs_pat
 
             avg_loss = total_loss / float(examples)
             
-            if not train: #or epoch % 20 == 0:
-                pts_ = np.reshape(np.concatenate(pts, axis=1), (-1,3))
-                sdf_predictions_ = np.reshape(np.concatenate(predictions, axis=1), (-1,))
-                true = np.reshape(np.concatenate(true, axis=1), (-1,))
-                plot_3d_points(pts_, true)
-                plot_3d_points(pts_, sdf_predictions_)
+            # if not train: #or epoch % 20 == 0:
+            #     pts_ = np.reshape(np.concatenate(pts, axis=1), (-1,3))
+            #     sdf_predictions_ = np.reshape(np.concatenate(predictions, axis=1), (-1,))
+            #     true = np.reshape(np.concatenate(true, axis=1), (-1,))
+            #     plot_3d_points(pts_, true)
+            #     plot_3d_points(pts_, sdf_predictions_)
 
             print(avg_loss)
 
             # Save model if it's the best one we've seen.
-            if avg_loss < best_loss and train:
-                best_loss = avg_loss
-                save_path = saver.save(sess, os.path.join(model_path, 'model.ckpt'))
-                print("Model saved to: %s" % save_path)
+            # if avg_loss < best_loss and train:
+            #     best_loss = avg_loss
+            #     save_path = saver.save(sess, os.path.join(model_path, 'model.ckpt'))
+            #     print("Model saved to: %s" % save_path)
 
             if train:
                 f_writer.add_summary(tf.Summary(
@@ -171,10 +170,10 @@ def run(get_model, train_path, validation_path, pc_h5_file, model_path, logs_pat
             avg_loss = total_loss / float(examples)
 
             # Save model if it's the best one we've seen.
-            # if avg_loss < best_loss and train:
-            #     best_loss = avg_loss
-            #     save_path = saver.save(sess, os.path.join(model_path, 'model.ckpt'))
-            #     print("Model saved to: %s" % save_path)
+            if avg_loss < best_loss and train:
+                best_loss = avg_loss
+                save_path = saver.save(sess, os.path.join(model_path, 'model.ckpt'))
+                print("Model saved to: %s" % save_path)
 
             if train:
                 f_writer.add_summary(tf.Summary(
@@ -183,67 +182,88 @@ def run(get_model, train_path, validation_path, pc_h5_file, model_path, logs_pat
                     ]), epoch)
                 
 
-def extract_voxel(get_model, model_path, loss_function):
+def extract_voxel(get_model, model_path, loss_function, train_path, validation_path, mesh):
 
-    #train_files = [os.path.join(train_path, 'donut_poisson_000_0.tfrecord')]
-    #train_dataset = get_sdf_dataset(train_files, batch_size=batch_size)
-    # # Setup iterators.
-    # train_iterator = train_dataset.make_initializable_iterator()
-    # train_next_point_cloud, train_next_xyz, train_next_label = train_iterator.get_next()
+    # Read in training and validation files.
+    validation_files = [os.path.join(validation_path, filename) for filename in os.listdir(validation_path) if ".tfrecord" in filename]
+
+    sdf_count_ = 2048
+    voxel_resolution = 128
+    
+    # Fetch the data.
+    validation_dataset = get_sdf_dataset(validation_files, batch_size=1, sdf_count=sdf_count_)
+
+    # Setup iterators.
+    val_iterator = validation_dataset.make_initializable_iterator()
+    val_next_point_cloud, val_next_xyz, val_next_label = val_iterator.get_next()
     
     # Setup model operations.
     points = tf.placeholder(tf.float32)
     xyz_in = tf.placeholder(tf.float32)    
     sdf_labels = tf.placeholder(tf.float32)
     is_training = tf.placeholder(tf.bool)
-    sdf_prediction, voxel_prediction, loss, _ = get_model(points, xyz_in, sdf_labels, is_training, None, batch_size=1, alpha=0.5, loss_function=loss_function)
 
+    sdf_prediction, loss, _ = get_model(points, xyz_in, sdf_labels, is_training, None, batch_size=1, alpha=0.5, loss_function=loss_function, sdf_count=sdf_count_)
+
+    # Generate points to sample.
+    pts = []
+    for x in range(voxel_resolution):
+        for y in range(voxel_resolution):
+            for z in range(voxel_resolution):
+                x_ = -0.5 + ((1.0 / float(voxel_resolution-1)) * x)
+                y_ = -0.5 + ((1.0 / float(voxel_resolution-1)) * y)
+                z_ = -0.5 + ((1.0 / float(voxel_resolution-1)) * z)
+                pts.append([x_, y_, z_])
+    pts = np.array(pts)
+    pt_splits = np.split(pts, pts.shape[0] // sdf_count_)
+    
     # Save/Restore model.
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
         saver.restore(sess, os.path.join(model_path, 'model.ckpt'))
 
+        # Setup function that predicts SDF for (x,y,z) given a point cloud.
+        def get_sdf(point_cloud, pts):
+
+            prediction = sess.run(sdf_prediction, feed_dict = {
+                points: point_cloud, xyz_in: pts, sdf_labels: None, is_training: False,
+            })
+
+            # print(xyz)
+            # print(prediction)
+
+            return prediction
+        
+        sess.run(val_iterator.initializer)
         for i in range(20):
-            point_cloud = get_point_clouds(np.array(["jar_poisson_012_"+ str(i)]), '/dataspace/ReconstructionData/SDF_Jar/point_clouds.h5')
-
-            # Setup function that predicts SDF from (x,y,z).
-            def get_sdf(pts):
-
-                prediction = sess.run(sdf_prediction, feed_dict = {
-                    points: point_cloud, xyz_in: pts, sdf_labels: None, is_training: False,
-                })
-
-                # print(xyz)
-                # print(prediction)
-
-                return prediction
-
+            point_clouds_, xyzs_, labels_ = sess.run((val_next_point_cloud, val_next_xyz, val_next_label))
+            
             # Setup a voxelization based on the SDF.
-            voxelized = np.ones((32,32,32), dtype=np.float32)
+            voxelized = np.zeros((voxel_resolution,voxel_resolution,voxel_resolution), dtype=np.float32)
 
-            pts = []
-
-            for x in range(32):
-                for y in range(32):
-                    for z in range(32):
-                        x_ = -0.5 + ((1.0 / 31.0) * x)
-                        y_ = -0.5 + ((1.0 / 31.0) * y)
-                        z_ = -0.5 + ((1.0 / 31.0) * z)
-                        pts.append([x_, y_, z_])
-
-            # Pull out lists of 64 to evaluate.
-            pts = np.array(pts)
             filled_pts = []
 
-            for pts_ in np.split(pts, pts.shape[0] // 64):
+            # For all points sample SDF given the point cloud and include points inside the object to a point cloud.
+            for pts_ in pt_splits:
+                sdf_ = get_sdf(point_clouds_, np.reshape(pts_, (1,sdf_count_,3)))
 
-                sdf_ = get_sdf(np.reshape(pts_, (1,64,3)))
-
-                for pt_, sdf in zip(np.reshape(pts_, (64,3)), np.reshape(sdf_, (64,))):
+                for pt_, sdf in zip(np.reshape(pts_, (sdf_count_,3)), np.reshape(sdf_, (sdf_count_,))):
                     if sdf <= 0.0 and sdf >= -0.05:
-                        filled_pts.append(pt_)
+                        #filled_pts.append(pt_)
+                        x_ = int(round((pt_[0] + 0.5) * float(voxel_resolution-1)))
+                        y_ = int(round((pt_[1] + 0.5) * float(voxel_resolution-1)))
+                        z_ = int(round((pt_[2] + 0.5) * float(voxel_resolution-1)))
+                        voxelized[x_,y_,z_] = 1.0
 
             # Plot.
-            plot_3d_points(point_cloud[0])
-            plot_3d_points(np.reshape(filled_pts, (-1,3)))
+            plot_3d_points(point_clouds_[0])
+            #plot_3d_points(np.reshape(filled_pts, (-1,3)))
+            if mesh:
+                # Mesh w/ mcubes.
+                #plot_voxel(convert_to_sparse_voxel_grid(voxelized), voxel_res=(voxel_resolution, voxel_resolution, voxel_resolution))
+                vertices, triangles = mcubes.marching_cubes(voxelized, 0)
+                mcubes.export_mesh(vertices, triangles, 'test.dae', 'test')
+
+                meshed_object = trimesh.load('test.dae')
+                meshed_object.show()
