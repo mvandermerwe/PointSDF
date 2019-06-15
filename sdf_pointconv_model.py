@@ -130,7 +130,7 @@ def get_pointconv_deep_bn_model(points, xyz, sdf_label, is_training, bn_decay, b
         embedded_inputs = tf.concat([pts_embedding, cloud_embedding], axis=2)
 
         # 8 Dense layers w/ ReLU non-linearities to predict SDF.
-        l1_sdf = tf.layers.Dense(512)(xyz_in)
+        l1_sdf = tf.layers.Dense(512)(embedded_inputs)
         l1_sdf = tf.layers.batch_normalization(l1_sdf, training=is_training)
         l1_sdf = tf.nn.relu(l1_sdf)
 
@@ -138,7 +138,7 @@ def get_pointconv_deep_bn_model(points, xyz, sdf_label, is_training, bn_decay, b
         l2_sdf = tf.layers.batch_normalization(l2_sdf, training=is_training)
         l2_sdf = tf.nn.relu(l2_sdf)
 
-        l3_sdf = tf.layers.Dense(509)(l2_sdf)
+        l3_sdf = tf.layers.Dense(256)(l2_sdf)
         l3_sdf = tf.layers.batch_normalization(l3_sdf, training=is_training)
         l3_sdf = tf.nn.relu(l3_sdf)
 
