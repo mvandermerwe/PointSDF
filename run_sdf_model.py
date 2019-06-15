@@ -188,7 +188,7 @@ def extract_voxel(get_model, model_path, loss_function, train_path, validation_p
     validation_files = [os.path.join(validation_path, filename) for filename in os.listdir(validation_path) if ".tfrecord" in filename]
 
     sdf_count_ = 2048
-    voxel_resolution = 128
+    voxel_resolution = 32
     
     # Fetch the data.
     validation_dataset = get_sdf_dataset(validation_files, batch_size=1, sdf_count=sdf_count_)
@@ -250,7 +250,7 @@ def extract_voxel(get_model, model_path, loss_function, train_path, validation_p
 
                 for pt_, sdf in zip(np.reshape(pts_, (sdf_count_,3)), np.reshape(sdf_, (sdf_count_,))):
                     if sdf <= 0.0 and sdf >= -0.05:
-                        #filled_pts.append(pt_)
+                        filled_pts.append(pt_)
                         x_ = int(round((pt_[0] + 0.5) * float(voxel_resolution-1)))
                         y_ = int(round((pt_[1] + 0.5) * float(voxel_resolution-1)))
                         z_ = int(round((pt_[2] + 0.5) * float(voxel_resolution-1)))
@@ -258,7 +258,7 @@ def extract_voxel(get_model, model_path, loss_function, train_path, validation_p
 
             # Plot.
             plot_3d_points(point_clouds_[0])
-            #plot_3d_points(np.reshape(filled_pts, (-1,3)))
+            plot_3d_points(np.reshape(filled_pts, (-1,3)))
             if mesh:
                 # Mesh w/ mcubes.
                 #plot_voxel(convert_to_sparse_voxel_grid(voxelized), voxel_res=(voxel_resolution, voxel_resolution, voxel_resolution))
