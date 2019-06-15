@@ -1,7 +1,6 @@
 # Code for visualizing voxels and point clouds.
 
 from matplotlib import pyplot
-import pylab
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 

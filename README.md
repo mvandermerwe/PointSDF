@@ -22,7 +22,32 @@ We have a pretrained version of our architecture ready to run (this is not our f
 
 ### Dependencies:
 
+Our code depends on the following python libraries:
+ * Tensorflow (>=1.9.0)
+ * numpy
+ * mcubes
+ * trimesh
+ * matplotlib
+ 
+We additionally rely on PointConv for our embedding layers. PointConv should be cloned from [here](https://github.com/DylanWusee/pointconv) and their instructions should be followed to compile their custom TF operations. Additionally, the environment variable `POINTCONV_HOME` should be set to point at the pointconv repository folder.
+
+### Dataset:
+
+We have a simple TFRecord-based dataset that holds point cloud, query point, SDF training examples in Train, Validation, and Test folds. The dataset should be uncompressed somewhere and the Train and Validation folders passed into the `--train_path` and `--validation_path` arguments to our script (see below). The dataset can be downloaded from [here](https://uofu.box.com/s/xz9nromkjick63kb4fhmx3routy2klsp) (~6.4GB).
+
 ### Usage:
+
+For full list of options run:
+```
+python main.py -h
+```
+Not all options are necessary each run and have reasonable defaults.
+
+If you have downloaded our dataset to some folder `data`, you can run inference to voxelization with our network using the following command (note, we pass a training folder, but don't use it for testing):
+```
+python main.py --model_func pointconv_bn --model_name pointconv_full --voxelize --train_path data/SDF_Full/Train/ --validation_path data/SDF_Full/Validation/
+```
+You can additionally pass `--mesh` to turn the voxelization into a mesh. Currently, voxelization and meshing are done at 32x32x32 resolution, for fast demonstration.
 
 ## References:
 
