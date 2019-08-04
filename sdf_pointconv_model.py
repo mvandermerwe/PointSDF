@@ -6,15 +6,15 @@ import tensorflow as tf
 import numpy as np
 import sys
 import pdb
-import mcubes
+#import mcubes
 import os
 
 sys.path.append(os.environ['POINTCONV_HOME'])
 from PointConv import feature_encoding_layer
 
-from helper import get_bn_decay
+#from helper import get_bn_decay
 
-def get_pointconv_deep_model(points, xyz, sdf_label, is_training, bn_decay, batch_size=32, loss_feature='loss', alpha=0.5, loss_function='mse', sdf_count=64):
+def get_pointconv_model(points, xyz, sdf_label, is_training, bn_decay, batch_size=32, loss_feature='loss', alpha=0.5, loss_function='mse'):
     '''
     Given features and label return prediction, loss ops.
     '''
@@ -22,12 +22,12 @@ def get_pointconv_deep_model(points, xyz, sdf_label, is_training, bn_decay, batc
     # Get inputs from our features map.
     l0_xyz = tf.reshape(points, shape=(batch_size, -1, 3))
     l0_points = None
-    xyz_in = tf.reshape(xyz, shape=(batch_size, sdf_count, 3))
-    sdf_label = tf.reshape(sdf_label, shape=(batch_size, sdf_count, 1)) # This is important.
+    xyz_in = tf.reshape(xyz, shape=(batch_size, -1, 3))
+    sdf_label = tf.reshape(sdf_label, shape=(batch_size, -1, 1)) # This is important.
 
     with tf.variable_scope('points_embedding'):
-        # Embed our input points to some 256 vector.
 
+        # Embed our input points to some 256 vector.
         l1_pts = tf.layers.Dense(512, activation=tf.nn.relu, use_bias=True)(xyz_in)
         l1_pts = tf.layers.dropout(l1_pts, rate=0.2, training=is_training)
 
@@ -35,6 +35,7 @@ def get_pointconv_deep_model(points, xyz, sdf_label, is_training, bn_decay, batc
         pts_embedding = tf.layers.dropout(pts_embedding, rate=0.2, training=is_training)
     
     with tf.variable_scope('encoder'):
+
         # Encode w/ PointConv Layers.
         l1_xyz, l1_points = feature_encoding_layer(l0_xyz, l0_xyz, npoint=512, radius=0.1, sigma=0.05, K=32, mlp=[32,32,64], is_training=is_training, bn_decay=bn_decay, weight_decay=None, scope='layer1')
         l2_xyz, l2_points = feature_encoding_layer(l1_xyz, l1_points, npoint=256, radius=0.2, sigma=0.1, K=32, mlp=[64,64,64], is_training=is_training, bn_decay=bn_decay, weight_decay=None, scope='layer2')
@@ -49,34 +50,117 @@ def get_pointconv_deep_model(points, xyz, sdf_label, is_training, bn_decay, batc
         cloud_embedding = tf.layers.batch_normalization(cloud_embedding, training=is_training)
         cloud_embedding = tf.nn.relu(cloud_embedding)
 
+    with tf.variable_scope('sdf'):
+
+        # Combine embeddings. First reshape cloud embeddings to concat with each pt embedding.
+        cloud_embedding = tf.tile(tf.expand_dims(cloud_embedding,1), [1, tf.shape(pts_embedding)[1], 1])
+        embedded_inputs = tf.concat([pts_embedding, cloud_embedding], axis=2)
+
+        # 8 Dense layers w/ ReLU non-linearities to predict SDF.
+        l1_sdf = tf.layers.Dense(512, name='sdf_1')(embedded_inputs)
+        l1_sdf_1 = tf.layers.batch_normalization(l1_sdf, training=is_training)
+        l1_sdf_2 = tf.nn.relu(l1_sdf_1)
+
+        l2_sdf = tf.layers.Dense(512, name='sdf_2')(l1_sdf_2)
+        l2_sdf_1 = tf.layers.batch_normalization(l2_sdf, training=is_training)
+        l2_sdf_2 = tf.nn.relu(l2_sdf_1)
+
+        l3_sdf = tf.layers.Dense(256, name='sdf_3')(l2_sdf_2)
+        l3_sdf_1 = tf.layers.batch_normalization(l3_sdf, training=is_training)
+        l3_sdf_2 = tf.nn.relu(l3_sdf_1)
+
+        # Feed our input embedding space back in here.
+        l3_sdf_aug = tf.concat([l3_sdf_2, embedded_inputs], axis=2)
+        l4_sdf = tf.layers.Dense(512, name='sdf_4')(l3_sdf_aug)
+        l4_sdf_1 = tf.layers.batch_normalization(l4_sdf, training=is_training)
+        l4_sdf_2 = tf.nn.relu(l4_sdf_1)
+
+        l5_sdf = tf.layers.Dense(512, name='sdf_5')(l4_sdf_2)
+        l5_sdf_1 = tf.layers.batch_normalization(l5_sdf, training=is_training)
+        l5_sdf_2 = tf.nn.relu(l5_sdf_1)
+
+        l6_sdf = tf.layers.Dense(512, name='sdf_6')(l5_sdf_2)
+        l6_sdf_1 = tf.layers.batch_normalization(l6_sdf, training=is_training)
+        l6_sdf_2 = tf.nn.relu(l6_sdf_1)
+
+        l7_sdf = tf.layers.Dense(512, name='sdf_7')(l6_sdf_2)
+        l7_sdf_1 = tf.layers.batch_normalization(l7_sdf, training=is_training)
+        l7_sdf_2 = tf.nn.relu(l7_sdf_1)
+
+        sdf_prediction = tf.layers.Dense(1, activation=tf.nn.tanh, use_bias=True, name='sdf_8')(l7_sdf_2) # Last is tanh
+
+    # Define the loss: clipped surface loss.
+    # loss = tf.losses.absolute_difference(
+    #     tf.clip_by_value(sdf_label, -0.1, 0.1),
+    #     tf.clip_by_value(sdf_prediction, -0.1, 0.1)) 
+    loss = tf.losses.mean_squared_error(sdf_label, sdf_prediction)
+    tf.summary.scalar(loss_feature, loss)
+
+    # Collect debug print statements as needed.
+    debug = tf.no_op()
+    
+    return sdf_prediction, loss, debug
+
+def get_sdf_model(cloud_embedding, xyz, sdf_label, is_training, bn_decay, batch_size=32, loss_feature='loss', alpha=0.5, loss_function='mse'):
+    '''
+    Given features and label return prediction, loss ops. Make savable version to run in C++. That is, we remove the cloud embedding w/ PointConv since that 
+    will be difficult due to PointConv layers.
+    '''
+
+    # Get inputs from our features map.
+    # l0_xyz = tf.reshape(points, shape=(batch_size, -1, 3))
+    # l0_points = None
+    cloud_embedding = tf.reshape(cloud_embedding, shape=(batch_size, 256))
+    xyz_in = tf.reshape(xyz, shape=(batch_size, -1, 3))
+    sdf_label = tf.reshape(sdf_label, shape=(batch_size, -1, 1)) # This is important.
+
+    with tf.variable_scope('points_embedding'):
+        # Embed our input points to some 256 vector.
+
+        l1_pts = tf.layers.Dense(512, activation=tf.nn.relu, use_bias=True)(xyz_in)
+        l1_pts = tf.layers.dropout(l1_pts, rate=0.2, training=is_training)
+
+        pts_embedding = tf.layers.Dense(256, activation=tf.nn.relu, use_bias=True)(l1_pts)
+        pts_embedding = tf.layers.dropout(pts_embedding, rate=0.2, training=is_training)
 
     with tf.variable_scope('sdf'):
 
         # Combine embeddings. First reshape cloud embeddings to concat with each pt embedding.
-        cloud_embedding = tf.tile(tf.expand_dims(cloud_embedding,1), [1, sdf_count, 1])
+        cloud_embedding = tf.tile(tf.expand_dims(cloud_embedding,1), [1, tf.shape(pts_embedding)[1], 1])
         embedded_inputs = tf.concat([pts_embedding, cloud_embedding], axis=2)
 
         # 8 Dense layers w/ ReLU non-linearities to predict SDF.
-        l1_sdf = tf.layers.Dense(512, activation=tf.nn.relu, use_bias=True)(embedded_inputs)
-        l1_sdf = tf.layers.dropout(l1_sdf, rate=0.2, training=is_training)
-        l2_sdf = tf.layers.Dense(512, activation=tf.nn.relu, use_bias=True)(l1_sdf)
-        l2_sdf = tf.layers.dropout(l2_sdf, rate=0.2, training=is_training)        
-        l3_sdf = tf.layers.Dense(256, activation=tf.nn.relu, use_bias=True)(l2_sdf)
-        l3_sdf = tf.layers.dropout(l3_sdf, rate=0.2, training=is_training)        
+        l1_sdf = tf.layers.Dense(512, name='sdf_1')(embedded_inputs)
+        l1_sdf_1 = tf.layers.batch_normalization(l1_sdf, training=is_training)
+        l1_sdf_2 = tf.nn.relu(l1_sdf_1)
+
+        l2_sdf = tf.layers.Dense(512, name='sdf_2')(l1_sdf_2)
+        l2_sdf_1 = tf.layers.batch_normalization(l2_sdf, training=is_training)
+        l2_sdf_2 = tf.nn.relu(l2_sdf_1)
+
+        l3_sdf = tf.layers.Dense(256, name='sdf_3')(l2_sdf_2)
+        l3_sdf_1 = tf.layers.batch_normalization(l3_sdf, training=is_training)
+        l3_sdf_2 = tf.nn.relu(l3_sdf_1)
 
         # Feed our input embedding space back in here.
-        l3_sdf_aug = tf.concat([l3_sdf, embedded_inputs], axis=2)
-        l4_sdf = tf.layers.Dense(512, activation=tf.nn.relu, use_bias=True)(l3_sdf_aug)
-        l4_sdf = tf.layers.dropout(l4_sdf, rate=0.2, training=is_training)
+        l3_sdf_aug = tf.concat([l3_sdf_2, embedded_inputs], axis=2)
+        l4_sdf = tf.layers.Dense(512, name='sdf_4')(l3_sdf_aug)
+        l4_sdf_1 = tf.layers.batch_normalization(l4_sdf, training=is_training)
+        l4_sdf_2 = tf.nn.relu(l4_sdf_1)
 
-        l5_sdf = tf.layers.Dense(512, activation=tf.nn.relu, use_bias=True)(l4_sdf)
-        l5_sdf = tf.layers.dropout(l5_sdf, rate=0.2, training=is_training)        
-        l6_sdf = tf.layers.Dense(512, activation=tf.nn.relu, use_bias=True)(l5_sdf)
-        l6_sdf = tf.layers.dropout(l6_sdf, rate=0.2, training=is_training)        
-        l7_sdf = tf.layers.Dense(512, activation=tf.nn.relu, use_bias=True)(l6_sdf)
-        l7_sdf = tf.layers.dropout(l7_sdf, rate=0.2, training=is_training)
+        l5_sdf = tf.layers.Dense(512, name='sdf_5')(l4_sdf_2)
+        l5_sdf_1 = tf.layers.batch_normalization(l5_sdf, training=is_training)
+        l5_sdf_2 = tf.nn.relu(l5_sdf_1)
 
-        sdf_prediction = tf.layers.Dense(1, activation=tf.nn.tanh, use_bias=True)(l7_sdf) # Last is tanh
+        l6_sdf = tf.layers.Dense(512, name='sdf_6')(l5_sdf_2)
+        l6_sdf_1 = tf.layers.batch_normalization(l6_sdf, training=is_training)
+        l6_sdf_2 = tf.nn.relu(l6_sdf_1)
+
+        l7_sdf = tf.layers.Dense(512, name='sdf_7')(l6_sdf_2)
+        l7_sdf_1 = tf.layers.batch_normalization(l7_sdf, training=is_training)
+        l7_sdf_2 = tf.nn.relu(l7_sdf_1)
+
+        sdf_prediction = tf.layers.Dense(1, activation=tf.nn.tanh, use_bias=True, name='sdf_8')(l7_sdf_2) # Last is tanh
 
     # Define the loss:
     loss = tf.losses.mean_squared_error(sdf_label, sdf_prediction)
@@ -87,27 +171,14 @@ def get_pointconv_deep_model(points, xyz, sdf_label, is_training, bn_decay, batc
     
     return sdf_prediction, loss, debug
 
-def get_pointconv_deep_bn_model(points, xyz, sdf_label, is_training, bn_decay, batch_size=32, loss_feature='loss', alpha=0.5, loss_function='mse', sdf_count=64):
-    '''
-    Given features and label return prediction, loss ops.
-    '''
+def get_embedding_model(points, is_training, bn_decay, batch_size=1):
 
     # Get inputs from our features map.
     l0_xyz = tf.reshape(points, shape=(batch_size, -1, 3))
     l0_points = None
-    xyz_in = tf.reshape(xyz, shape=(batch_size, sdf_count, 3))
-    sdf_label = tf.reshape(sdf_label, shape=(batch_size, sdf_count, 1)) # This is important.
-
-    with tf.variable_scope('points_embedding'):
-        # Embed our input points to some 256 vector.
-
-        l1_pts = tf.layers.Dense(512, activation=tf.nn.relu, use_bias=True)(xyz_in)
-        l1_pts = tf.layers.dropout(l1_pts, rate=0.2, training=is_training)
-
-        pts_embedding = tf.layers.Dense(256, activation=tf.nn.relu, use_bias=True)(l1_pts)
-        pts_embedding = tf.layers.dropout(pts_embedding, rate=0.2, training=is_training)
     
     with tf.variable_scope('encoder'):
+
         # Encode w/ PointConv Layers.
         l1_xyz, l1_points = feature_encoding_layer(l0_xyz, l0_xyz, npoint=512, radius=0.1, sigma=0.05, K=32, mlp=[32,32,64], is_training=is_training, bn_decay=bn_decay, weight_decay=None, scope='layer1')
         l2_xyz, l2_points = feature_encoding_layer(l1_xyz, l1_points, npoint=256, radius=0.2, sigma=0.1, K=32, mlp=[64,64,64], is_training=is_training, bn_decay=bn_decay, weight_decay=None, scope='layer2')
@@ -122,51 +193,49 @@ def get_pointconv_deep_bn_model(points, xyz, sdf_label, is_training, bn_decay, b
         cloud_embedding = tf.layers.batch_normalization(cloud_embedding, training=is_training)
         cloud_embedding = tf.nn.relu(cloud_embedding)
 
+    return cloud_embedding
 
-    with tf.variable_scope('sdf'):
+def get_prediction(get_model, model_path):
 
-        # Combine embeddings. First reshape cloud embeddings to concat with each pt embedding.
-        cloud_embedding = tf.tile(tf.expand_dims(cloud_embedding,1), [1, sdf_count, 1])
-        embedded_inputs = tf.concat([pts_embedding, cloud_embedding], axis=2)
+    # Setup model operations.
+    points = tf.placeholder(tf.float32)
+    # cloud = tf.placeholder(tf.float32)
+    xyz_in = tf.placeholder(tf.float32)    
+    sdf_labels = tf.placeholder(tf.float32)
+    is_training = tf.placeholder(tf.bool)
 
-        # 8 Dense layers w/ ReLU non-linearities to predict SDF.
-        l1_sdf = tf.layers.Dense(512)(xyz_in)
-        l1_sdf = tf.layers.batch_normalization(l1_sdf, training=is_training)
-        l1_sdf = tf.nn.relu(l1_sdf)
+    sdf_prediction, loss, _ = get_model(points, xyz_in, sdf_labels, is_training, None, batch_size=1)
 
-        l2_sdf = tf.layers.Dense(512)(l1_sdf)
-        l2_sdf = tf.layers.batch_normalization(l2_sdf, training=is_training)
-        l2_sdf = tf.nn.relu(l2_sdf)
+    # Save/Restore model.
+    saver = tf.train.Saver()
 
-        l3_sdf = tf.layers.Dense(509)(l2_sdf)
-        l3_sdf = tf.layers.batch_normalization(l3_sdf, training=is_training)
-        l3_sdf = tf.nn.relu(l3_sdf)
+    sess = tf.Session()
+    saver.restore(sess, os.path.join(model_path, 'model.ckpt'))
 
-        # Feed our input embedding space back in here.
-        l3_sdf_aug = tf.concat([l3_sdf, embedded_inputs], axis=2)
-        l4_sdf = tf.layers.Dense(512)(l3_sdf_aug)
-        l4_sdf = tf.layers.batch_normalization(l4_sdf, training=is_training)
-        l4_sdf = tf.nn.relu(l4_sdf)
+    # Get embedding tensor.
+    embedding = tf.get_default_graph().get_tensor_by_name("encoder/Relu:0")
 
-        l5_sdf = tf.layers.Dense(512)(l4_sdf)
-        l5_sdf = tf.layers.batch_normalization(l5_sdf, training=is_training)
-        l5_sdf = tf.nn.relu(l5_sdf)
+    # SDF gradient:
+    points_gradient = tf.gradients(sdf_prediction, xyz_in)
 
-        l6_sdf = tf.layers.Dense(512)(l5_sdf)
-        l6_sdf = tf.layers.batch_normalization(l6_sdf, training=is_training)
-        l6_sdf = tf.nn.relu(l6_sdf)
+    # Setup function that predicts SDF for (x,y,z) given a point cloud.
+    def get_sdf(pt_cloud, query_pts):
+        prediction = sess.run(sdf_prediction, feed_dict = {
+            points: pt_cloud, xyz_in: query_pts, sdf_labels: None, is_training: False,
+        })
+        return prediction
 
-        l7_sdf = tf.layers.Dense(512)(l6_sdf)
-        l7_sdf = tf.layers.batch_normalization(l7_sdf, training=is_training)
-        l7_sdf = tf.nn.relu(l7_sdf)
+    def get_embedding(point_cloud):
+        cloud_embedding = sess.run(embedding, feed_dict = {
+            points: point_cloud, xyz_in: None, sdf_labels: None, is_training: False,
+        })
+        return cloud_embedding
 
-        sdf_prediction = tf.layers.Dense(1, activation=tf.nn.tanh, use_bias=True)(l7_sdf) # Last is tanh
+    def get_sdf_gradient(pt_cloud, query_pts):
+        # Does both sdf and gradient.
+        prediction, gradient = sess.run([sdf_prediction, points_gradient], feed_dict = {
+            points: pt_cloud, xyz_in: query_pts, sdf_labels: None, is_training: False,
+        })
+        return prediction, gradient
 
-    # Define the loss:
-    loss = tf.losses.mean_squared_error(sdf_label, sdf_prediction)
-    tf.summary.scalar(loss_feature, loss)
-
-    # Collect debug print statements as needed.
-    debug = tf.no_op()
-    
-    return sdf_prediction, loss, debug
+    return get_sdf, get_embedding, get_sdf_gradient

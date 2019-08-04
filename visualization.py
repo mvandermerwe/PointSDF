@@ -3,6 +3,7 @@
 from matplotlib import pyplot
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
+import pdb
 
 def plot_3d_points(points, signed_distances=None):
     fig = pyplot.figure()
@@ -10,11 +11,11 @@ def plot_3d_points(points, signed_distances=None):
     ax = fig.add_subplot(111, projection='3d')
 
     if len(points) != 0:
-        ax.scatter(points[:, 0], points[:, 1], points[:, 2], c=signed_distances)
+        ax.scatter(xs=points[:, 0], ys=points[:, 1], zs=points[:, 2], c=signed_distances)
 
-    ax.set_xlabel('X Label')
-    ax.set_ylabel('Y Label')
-    ax.set_zlabel('Z Label')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
     ax.set_title('SDF')
 
     ax.set_xlim3d(-0.5, 0.5)
@@ -31,9 +32,9 @@ def plot_voxel(voxel, img_path=None, voxel_res=(32,32,32)):
     if len(voxel) != 0:
         ax.scatter(voxel[:, 0], voxel[:, 1], voxel[:, 2])
 
-    ax.set_xlabel('X Label')
-    ax.set_ylabel('Y Label')
-    ax.set_zlabel('Z Label')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
     ax.set_title('voxel')
 
     if voxel_res is not None:
