@@ -8,6 +8,10 @@ PointSDF is a novel, point cloud based, implicit surface reconstruction learning
 
 ![Architecture](images/architecture.png "PointSDF Architecture")
 
+PointSDF represents an object as the zero level set of a function that predicts the Signed Distance Function value for a given query point in arbitrary 3D space around an object. This is a regression problem, which we train using MSE loss.
+
+We embed input point clouds using 4 PointConv embedding layers [1]. Query points are embedded using dropout FC layers. The point clouds are embedded and appended to each input query points's embedding. This joint embedding is passed through 8 FC layers with Batch Norm and ReLU activations (also fed in at layer 4).
+
 ## Usage:
 
 ### Dependencies:
@@ -30,7 +34,7 @@ You will need the following:
 ### Pretrained Models:
 
 When extracted, pass name/enclosing folder as specified in the Usage section below:
-1. Full model [here](https://uofu.box.com/s/d1bpkobdslxt6amti24hmrutumyqrpyg).
+1. `pointconv_mse` - [here](https://uofu.box.com/s/w3irnokcgflgst6e7qmsn6d2awm39ptv).
 
 ### Usage:
 
@@ -45,9 +49,9 @@ Training run example:
 python main.py --learning_rate 1e-5 --optimizer adam --model_func pointconv --model_name test_training --model_path ~/models/sdf/ --log_path ~/logs/ --batch_size 8 --epochs 100 --training --train_path /dataspace/ReconstructionData/SDF_Full/Train/ --validation_path /dataspace/ReconstructionData/SDF_Full/Validation/ --sdf_count 256
 ```
 
-Meshing example (assumes trained model `full_model` is present in the models path):
+Meshing example (assumes trained model `pointconv_mse` is present in the models path and the PCD Files are unzipped in `PCD_PATH`):
 ```
-python main.py --model_func pointconv --log_path ~/logs/ --model_path ~/models/sdf/ --model_name full_model --mesh --mesh_folder ~/ReconstructedMeshes/SDF_MISE/ --pcd_folder /dataspace/PyrenderData/Depth/
+python main.py --model_func pointconv --log_path LOGS_PATH --model_path MODELS_PATH --model_name pointconv_mse --mesh --mesh_folder MESH_RESULTS_PATH --pcd_folder PCD_PATH
 ```
 
 ## References:
