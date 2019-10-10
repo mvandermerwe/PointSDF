@@ -2,7 +2,9 @@
 
 ![Results](images/results.png "PointSDF Qualitative Examples")
 
-PointSDF is a novel, point cloud based, implicit surface reconstruction learning architecture based on recent advances in the Computer Vision community [1,2,3]. Our approach uses new advances in point cloud based learning [1] in an architecture designed similar to [2], but with the implicit surface representation introduced in [3]. Our approach allows for fast point cloud based, reconstructions, specifically to be utilized in grasp planning. This is a part of ongoing research being done at the [LL4MA Lab](https://robot-learning.cs.utah.edu/) at the University of Utah.
+**See our preprint using PointSDF for real robotic grasping [here](https://sites.google.com/view/reconstruction-grasp/home)**
+
+PointSDF is a novel, point cloud based, implicit surface reconstruction learning architecture based on recent advances in the Computer Vision community [1,2,3]. Our approach uses new advances in point cloud based learning [1] in an architecture designed similar to [2], but with the implicit surface representation introduced in [3]. Our approach allows for fast point cloud based, reconstructions, specifically to be utilized in grasp planning. 
 
 ## Design:
 
