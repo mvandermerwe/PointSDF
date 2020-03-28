@@ -99,7 +99,7 @@ def find_object_frame(obj_cloud, verbose=False):
     align_z_axis, min_ang_axis_idx = find_min_ang_vec(z_axis, axes)
     R_o_w[0, 2] = align_z_axis[0, 0]
     R_o_w[1, 2] = align_z_axis[1, 0]
-    R_o_w[2, 2] = align_z_axis[2, 0]    
+    R_o_w[2, 2] = align_z_axis[2, 0]
 
     # Transpose to get rotation from world to object frame.
     R_w_o = np.transpose(R_o_w)
@@ -111,5 +111,5 @@ def find_object_frame(obj_cloud, verbose=False):
     align_trans_matrix[0,3] = d_w_o_o[0]
     align_trans_matrix[1,3] = d_w_o_o[1]
     align_trans_matrix[2,3] = d_w_o_o[2]    
-    
+
     return align_trans_matrix, centroid

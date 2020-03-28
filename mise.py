@@ -8,11 +8,13 @@ import mcubes
 import sys
 import os
 import cv2
+import pickle
 import pdb
 import pymesh
+from tqdm import tqdm
 
-from sdf_pointconv_model import get_pointconv_model, get_sdf_model, get_embedding_model, get_prediction
-from visualization import plot_3d_points, plot_voxel, convert_to_sparse_voxel_grid
+from sdf_pointconv_model import get_pointconv_model, get_sdf_model, get_embedding_model, get_sdf_prediction
+from visualization import plot_3d_points, plot_voxel, convert_to_sparse_voxel_grid, visualize_points_overlay
 from sdf_dataset import get_sdf_dataset, get_pcd
 
 from embedding import cloud_embedding
@@ -21,12 +23,11 @@ sys.path.append('/home/markvandermerwe/catkin_ws/src/ll4ma_3d_reconstruction/src
 from generate_view_splits import get_view_splits
 
 _MODEL_FUNC = get_pointconv_model
-_MODEL_PATH = '/home/markvandermerwe/models/sdf/pointconv_mse_object_frame'
-_PC_H5_FILE = '/dataspace/ReconstructionData/SDF_Voxel_Full/point_clouds.h5'
-_MESH_DATABASE = '/dataspace/YCBMeshes'
-_SAVE_PATH = '/home/markvandermerwe/ReconstructedMeshes/SDF_ObjFrame'
-_PCD_DATABASE = '/dataspace/PyrenderData/Depth/'
-_OBJECT_FRAME = True
+_MODEL_PATH = '/home/markvandermerwe/models/ICRA_Models/reconstruction/pointconv_mse_cf'
+_SAVE_PATH = '/home/markvandermerwe/data/ReconstructedMeshesTest/Real'
+_PCD_DATABASE = '/dataspace/ICRA_Data/PyrenderData/Depth/'
+_GRASP_DATABASE = False
+_OBJECT_FRAME = False
 
 def is_occupied(x, y, z, pre_voxelized):
     '''
@@ -105,8 +106,7 @@ def mise_voxel(get_sdf, bound, initial_voxel_resolution, final_voxel_resolution,
     # Start main loop that ups resolution.
     current_voxel_resolution = initial_voxel_resolution
     while current_voxel_resolution <= final_voxel_resolution:
-
-        print(current_voxel_resolution)
+        # print(current_voxel_resolution)
 
         # Setup voxelizations at this dimension.
         partial_voxelized = np.zeros((current_voxel_resolution + 1,current_voxel_resolution + 1,current_voxel_resolution + 1), dtype=np.float32)
@@ -117,7 +117,7 @@ def mise_voxel(get_sdf, bound, initial_voxel_resolution, final_voxel_resolution,
             pt_splits = np.array_split(grid_pts, grid_pts.shape[0] // sdf_count_)
         except ValueError:
             pt_splits = [grid_pts]
-        print(len(pt_splits))
+        # print(len(pt_splits))
         
         # For all points sample SDF given the point cloud.
         for pts_ in pt_splits:
@@ -167,37 +167,63 @@ def mise_voxel(get_sdf, bound, initial_voxel_resolution, final_voxel_resolution,
         active_voxels = np.array(new_active_voxels)
         current_voxel_resolution = current_voxel_resolution * 2
 
-    print("Done with extraction.")
+    # print("Done with extraction.")
+
+    # Padding to prevent holes if go up to edge.
+    voxels = voxelized
+    voxelized = np.pad(voxelized, ((1,1),(1,1),(1,1)), mode='constant')
     
     # Mesh w/ mcubes.
     vertices, triangles = mcubes.marching_cubes(voxelized, 0)
     vertices = vertices * voxel_size
 
     # Center mesh.
-    vertices[:,0] -= voxel_size * ((final_voxel_resolution) / 2)
-    vertices[:,1] -= voxel_size * ((final_voxel_resolution) / 2)
-    vertices[:,2] -= voxel_size * ((final_voxel_resolution) / 2)
+    vertices[:,0] -= voxel_size * (((final_voxel_resolution) / 2) + 1)
+    vertices[:,1] -= voxel_size * (((final_voxel_resolution) / 2) + 1)
+    vertices[:,2] -= voxel_size * (((final_voxel_resolution) / 2) + 1)
 
     vertices[:,0] -= centroid_diff[0]
     vertices[:,1] -= centroid_diff[1]
     vertices[:,2] -= centroid_diff[2]
     
     #save_file = os.path.join(save_path, view + '.off')
-    mcubes.export_off(vertices, triangles, save_path)
+    mcubes.export_obj(vertices, triangles, save_path)
 
     # Display mesh.
     if verbose:
         gen_mesh = trimesh.load(save_path)
         gen_mesh.show()
+
+    return None # convert_to_sparse_voxel_grid(voxels, threshold=0.5)
+
+def get_test_meshes(grasp_database=True, ycb_database=False):
+    meshes = set()
+    with open('/home/markvandermerwe/catkin_ws/src/ll4ma_3d_reconstruction/src/data_generation/data_split/test_fold.txt') as f:
+        for view in f:
+            if grasp_database and 'poisson' in view:
+                meshes.add('_'.join(view.split('_')[:-1]))
+            elif ycb_database and 'poisson' not in view:
+                meshes.add('_'.join(view.split('_')[:-1]))
     
-def mesh_objects(model_func, model_path, save_path, pcd_folder):
+    fin_meshes = []
+    for mesh in meshes:
+        fin_meshes.append(mesh + '_10')
+        
+    return fin_meshes
+
+def get_real_pt_cld():
+    real_info = "/home/markvandermerwe/data/GraspTestData/recon_high/mustard_p1_a1/grasp_plan_info.pickle"
+    obj_dict = pickle.load(open(real_info))
+    return obj_dict['scaled_object_cloud'], (obj_dict['max_dim'] * (1.03/1.0)), obj_dict['scale'], [0,0,0]
+        
+def mesh_objects(model_func, model_path, save_path, pcd_folder, grasp_database=True):
     # Setup model.
-    get_sdf, get_embedding, _ = get_prediction(model_func, model_path)
+    get_sdf, get_embedding, _ = get_sdf_prediction(model_func, model_path)
 
     # Get names of partial views.
-    # meshes = [filename.replace('.pcd','') for filename in os.listdir(pcd_folder) if ".pcd" in filename]
-    meshes = ['006_mustard_bottle_10']
-
+    # meshes = get_test_meshes(grasp_database=grasp_database, ycb_database=(not grasp_database))
+    meshes = ["mustard_real"]
+    
     # Bounds of 3D space to evaluate in: [-bound, bound] in each dim.
     bound = 0.8
     # Starting voxel resolution.
@@ -206,35 +232,22 @@ def mesh_objects(model_func, model_path, save_path, pcd_folder):
     final_voxel_resolution = 512
     
     # Mesh the views.
-    for mesh in meshes:
-        print(mesh)
-        
+    for mesh in tqdm(meshes):
         # Point cloud for this view.
-        pc_, length, scale, centroid_diff = get_pcd(mesh, pcd_folder, object_frame=_OBJECT_FRAME, verbose=True)
+        # pc_, length, scale, centroid_diff = get_pcd(mesh, pcd_folder, object_frame=_OBJECT_FRAME, verbose=False);
+        pc_, length, scale, centroid_diff = get_real_pt_cld()
+        
         voxel_size = (2.*bound * length) / float(final_voxel_resolution)    
         if pc_ is None:
             print(view, " has no point cloud.")
-            return
+            continue
         point_clouds_ = np.reshape(pc_, (1,1000,3))
 
         # Make view specific sdf func.
         def get_sdf_query(query_points):
             return get_sdf(point_clouds_, query_points)
-        
-        mise_voxel(get_sdf_query, bound, initial_voxel_resolution, final_voxel_resolution, voxel_size, centroid_diff, os.path.join(save_path, mesh + '.off'), verbose=False)
+
+        recon_voxel_pts = mise_voxel(get_sdf_query, bound, initial_voxel_resolution, final_voxel_resolution, voxel_size, centroid_diff, os.path.join(save_path, mesh + '.obj'), verbose=False)
     
 if __name__ == '__main__':
-    # Setup model.
-    # _, get_embedding, _ = get_prediction(_MODEL_FUNC, _MODEL_PATH)
-
-    # # Point cloud for this view.
-    # mesh = '002_master_chef_can_1'
-    # pc_, length, scale, centroid_diff = get_pcd(mesh, _PCD_DATABASE)
-    # if pc_ is None:
-    #     print(view, " has no point cloud.")
-    # point_clouds_ = np.reshape(pc_, (1,1000,3))
-
-    # embedding = get_embedding(point_clouds_)
-    # print("[" + ",".join(list(embedding[0].astype(np.str))) + "]")
-    
-    mesh_objects(_MODEL_FUNC, _MODEL_PATH, _SAVE_PATH, _PCD_DATABASE)
+    mesh_objects(_MODEL_FUNC, _MODEL_PATH, _SAVE_PATH, _PCD_DATABASE, _GRASP_DATABASE)

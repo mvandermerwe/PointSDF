@@ -1,4 +1,4 @@
-# Create PointNet2 + DeepSDF Estimator.
+# Create PointConv + DeepSDF Estimator.
 
 from __future__ import print_function
 
@@ -9,12 +9,16 @@ import pdb
 #import mcubes
 import os
 
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+config.gpu_options.per_process_gpu_memory_fraction = 0.2
+
 sys.path.append(os.environ['POINTCONV_HOME'])
 from PointConv import feature_encoding_layer
 
 #from helper import get_bn_decay
 
-def get_pointconv_model(points, xyz, sdf_label, is_training, bn_decay, batch_size=32, loss_feature='loss', alpha=0.5, loss_function='mse'):
+def get_pointconv_model(points, xyz, sdf_label, is_training, bn_decay, batch_size=32, loss_feature='loss'):
     '''
     Given features and label return prediction, loss ops.
     '''
@@ -101,7 +105,7 @@ def get_pointconv_model(points, xyz, sdf_label, is_training, bn_decay, batch_siz
     
     return sdf_prediction, loss, debug
 
-def get_sdf_model(cloud_embedding, xyz, sdf_label, is_training, bn_decay, batch_size=32, loss_feature='loss', alpha=0.5, loss_function='mse'):
+def get_sdf_model(cloud_embedding, xyz, sdf_label, is_training, bn_decay, batch_size=32, loss_feature='loss'):
     '''
     Given features and label return prediction, loss ops. Make savable version to run in C++. That is, we remove the cloud embedding w/ PointConv since that 
     will be difficult due to PointConv layers.
@@ -195,7 +199,7 @@ def get_embedding_model(points, is_training, bn_decay, batch_size=1):
 
     return cloud_embedding
 
-def get_prediction(get_model, model_path):
+def get_sdf_prediction(get_model, model_path):
 
     # Setup model operations.
     points = tf.placeholder(tf.float32)
@@ -209,7 +213,7 @@ def get_prediction(get_model, model_path):
     # Save/Restore model.
     saver = tf.train.Saver()
 
-    sess = tf.Session()
+    sess = tf.Session(config=config)
     saver.restore(sess, os.path.join(model_path, 'model.ckpt'))
 
     # Get embedding tensor.

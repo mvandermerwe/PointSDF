@@ -1,21 +1,23 @@
 # Handle SDF Dataset.
 
-import tensorflow as tf
+# import tensorflow as tf
 
-if __name__ == '__main__':
-    tf.enable_eager_execution()
+# if __name__ == '__main__':
+#     tf.enable_eager_execution()
 
 import numpy as np
-import h5py
+# import h5py
 import os
 import pdb
 import sys
-import pypcd
-from sklearn.decomposition import PCA
+from pypcd import pypcd
+# from sklearn.decomposition import PCA
 
-from visualization import plot_3d_points
+# from visualization import plot_3d_points, visualize_points_overlay
 
-from object_frame import find_object_frame
+sys.path.append('/home/markvandermerwe/catkin_ws/src/ll4ma_3d_reconstruction/src/data_generation/')
+from object_cloud import process_object_cloud
+# from object_frame import find_object_frame
 
 _POINT_CLOUD_SIZE = 1000
 
@@ -90,7 +92,7 @@ def get_voxel(view, voxel_file):
         voxel = f[view][:]
         return voxel
 
-def get_pcd(view, pcd_database, object_frame=False, verbose=False):
+def get_pcd(view, pcd_database, object_frame=False, verbose=False, unscaled=False):
     '''
     Read in the point cloud for the requested view from its pcd file.
     '''
@@ -104,7 +106,7 @@ def get_pcd(view, pcd_database, object_frame=False, verbose=False):
         return None
 
     # Point cloud size.
-    print("PC Size: ", len(point_cloud.pc_data))
+    # print("PC Size: ", len(point_cloud.pc_data))
     
     # Some objects end up filling whole screen - this is not useful to us.
     if len(point_cloud.pc_data) == 307200:
@@ -115,61 +117,15 @@ def get_pcd(view, pcd_database, object_frame=False, verbose=False):
     obj_cloud[:,1] = point_cloud.pc_data['y']
     obj_cloud[:,2] = point_cloud.pc_data['z']
 
-    # Get object frame for this point cloud.
-    if object_frame:
-        object_transform, world_frame_center = find_object_frame(obj_cloud, verbose)
+    obj_dict = process_object_cloud(obj_cloud, object_frame=object_frame, voxelize=False, verbose=verbose)
 
-        # Transform our point cloud. I.e. center and rotate to new frame.
-        for i in range(obj_cloud.shape[0]):
-            obj_cloud[i] = np.dot(object_transform, [obj_cloud[i][0], obj_cloud[i][1], obj_cloud[i][2], 1])[:3]
+    if unscaled:
+        return obj_dict['object_cloud']
 
-        centroid_diff = np.array([0.0,0.0,0.0])
-    else:
-        pca_operator = PCA(n_components=3, svd_solver='full')
-        pca_operator.fit(obj_cloud)
-        pca_centroid = np.matrix(pca_operator.mean_).T
-        centroid = np.array([
-            (np.amax(obj_cloud[:,0]) + np.amin(obj_cloud[:,0])) / 2,
-            (np.amax(obj_cloud[:,1]) + np.amin(obj_cloud[:,1])) / 2,
-            (np.amax(obj_cloud[:,2]) + np.amin(obj_cloud[:,2])) / 2,
-        ])
-
-        centroid_diff = np.array([
-            float(pca_centroid[0]) - centroid[0],
-            float(pca_centroid[1]) - centroid[1],
-            float(pca_centroid[2]) - centroid[2],        
-        ])
-
-        # Center.
-        obj_cloud[:,0] -= float(centroid[0])
-        obj_cloud[:,1] -= float(centroid[1])
-        obj_cloud[:,2] -= float(centroid[2])
-        
-    # Determine scaling size.
-    max_dim = max(
-        np.amax(obj_cloud[:,0]) - np.amin(obj_cloud[:,0]),
-        np.amax(obj_cloud[:,1]) - np.amin(obj_cloud[:,1]),
-        np.amax(obj_cloud[:,2]) - np.amin(obj_cloud[:,2]),
-    )
-
-    # Scale so that max dimension is about 1.
-    scale = (1.0/1.03) / max_dim
-    print("Scale, ", scale)
-
-    # Scale every point.
-    obj_cloud = obj_cloud * scale
-
-    # Down/Up Sample cloud so everything has the same # of points.
-    idxs = np.random.choice(obj_cloud.shape[0], size=_POINT_CLOUD_SIZE, replace=True)
-    obj_cloud = obj_cloud[idxs,:]
-
-    if verbose:
-        plot_3d_points(obj_cloud)
-
-    return obj_cloud, (max_dim * (1.03/1.0)), scale, centroid_diff
+    return obj_dict['scaled_object_cloud'], (obj_dict['max_dim'] * (1.03/1.0)), obj_dict['scale'], [0,0,0]
 
 if __name__ == '__main__':
-    train_folder = '/dataspace/ReconstructionData/SDF_Full_Fix/Train'
+    train_folder = '/dataspace/ICRA_Data/ReconstructionData/SDF_CF/Train'
     train_files = [os.path.join(train_folder, filename) for filename in os.listdir(train_folder) if ".tfrecord" in filename]
     
     dataset = get_sdf_dataset(train_files, batch_size=1, sdf_count=1024)
@@ -180,11 +136,5 @@ if __name__ == '__main__':
 
         points_inside = y.numpy()[0][np.where(np.reshape(z.numpy()[0], (-1,)) <= 0)]
         plot_3d_points(points_inside)
-
-        all_points = np.concatenate([point_cloud_points, points_inside], axis=0)
-
-        pt_cld_col = np.zeros(point_cloud_points.shape[0])
-        true_cld_col = np.zeros(points_inside.shape[0]) + 1
-        col = np.concatenate([pt_cld_col, true_cld_col])
         
-        plot_3d_points(all_points, col)
+        visualize_points_overlay([point_cloud_points, points_inside])
