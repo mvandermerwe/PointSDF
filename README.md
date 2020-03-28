@@ -2,8 +2,6 @@
 
 **See our publication using PointSDF for real robotic grasping [here](https://sites.google.com/view/reconstruction-grasp/home)**
 
-![Results](images/results.png "PointSDF Qualitative Examples")
-
 ![VideoResultsBanana](images/banana.gif "Banana Reconstruction")
 ![VideoResultsHammer](images/hammer.gif "Hammer Reconstruction")
 
