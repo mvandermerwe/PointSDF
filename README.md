@@ -31,8 +31,8 @@ We additionally rely on PointConv for our embedding layers. PointConv should be 
 ### Dataset:
 
 You will need the following:
-1. [Training Data](https://uofu.box.com/s/xz9nromkjick63kb4fhmx3routy2klsp) - train/validate/test folds of generated SDF data.
-2. [Raw Data](https://uofu.box.com/s/nxhr26gyyiud9yi3xap6p9fh6stf32vh) - Partial View data used to generate above.
+1. [Training Data](https://uofu.box.com/s/3h7sfsdecso38kt811o23hv1pymu737y) (6.8GB) - train/validate/test folds of generated SDF data.
+2. [Raw Data](https://uofu.box.com/s/zqsqegonzc837rtgdxkdg0r8gq5i4ecy) (4.1GB) - Partial View data used to generate above.
 
 ### Usage:
 
