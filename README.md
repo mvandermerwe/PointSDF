@@ -1,8 +1,11 @@
 # PointSDF
 
+**See our publication using PointSDF for real robotic grasping [here](https://sites.google.com/view/reconstruction-grasp/home)**
+
 ![Results](images/results.png "PointSDF Qualitative Examples")
 
-**See our preprint using PointSDF for real robotic grasping [here](https://sites.google.com/view/reconstruction-grasp/home)**
+![VideoResultsBanana](images/banana.gif "Banana Reconstruction")
+![VideoResultsHammer](images/hammer.gif "Hammer Reconstruction")
 
 PointSDF is a novel, point cloud based, implicit surface reconstruction learning architecture based on recent advances in the Computer Vision community [1,2,3]. Our approach uses new advances in point cloud based learning [1] in an architecture designed similar to [2], but with the implicit surface representation introduced in [3]. Our approach allows for fast point cloud based, reconstructions, specifically to be utilized in grasp planning. 
 
@@ -30,13 +33,8 @@ We additionally rely on PointConv for our embedding layers. PointConv should be 
 ### Dataset:
 
 You will need the following:
-1. [Training Data](https://uofu.box.com/s/xz9nromkjick63kb4fhmx3routy2klsp) - train/validate/test folds of generated sdf values.
-2. [PCD Files](https://uofu.box.com/s/nxhr26gyyiud9yi3xap6p9fh6stf32vh) - PCD files of partial views - used for meshing tests.
- 
-### Pretrained Models:
-
-When extracted, pass name/enclosing folder as specified in the Usage section below:
-1. `pointconv_mse` - [here](https://uofu.box.com/s/w3irnokcgflgst6e7qmsn6d2awm39ptv).
+1. [Training Data](https://uofu.box.com/s/xz9nromkjick63kb4fhmx3routy2klsp) - train/validate/test folds of generated SDF data.
+2. [Raw Data](https://uofu.box.com/s/nxhr26gyyiud9yi3xap6p9fh6stf32vh) - Partial View data used to generate above.
 
 ### Usage:
 
@@ -49,11 +47,6 @@ Not all options are necessary each run and have reasonable defaults.
 Training run example:
 ```
 python main.py --learning_rate 1e-5 --optimizer adam --model_func pointconv --model_name test_training --model_path ~/models/sdf/ --log_path ~/logs/ --batch_size 8 --epochs 100 --training --train_path /dataspace/ReconstructionData/SDF_Full/Train/ --validation_path /dataspace/ReconstructionData/SDF_Full/Validation/ --sdf_count 256
-```
-
-Meshing example (assumes trained model `pointconv_mse` is present in the models path and the PCD Files are unzipped in `PCD_PATH`):
-```
-python main.py --model_func pointconv --log_path LOGS_PATH --model_path MODELS_PATH --model_name pointconv_mse --mesh --mesh_folder MESH_RESULTS_PATH --pcd_folder PCD_PATH
 ```
 
 ## References:
