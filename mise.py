@@ -17,14 +17,10 @@ from sdf_pointconv_model import get_pointconv_model, get_sdf_model, get_embeddin
 from visualization import plot_3d_points, plot_voxel, convert_to_sparse_voxel_grid, visualize_points_overlay
 from sdf_dataset import get_sdf_dataset, get_pcd
 
-from embedding import cloud_embedding
-
-sys.path.append('/home/markvandermerwe/catkin_ws/src/ll4ma_3d_reconstruction/src/data_generation/')
-from generate_view_splits import get_view_splits
-
 _MODEL_FUNC = get_pointconv_model
 _MODEL_PATH = '/home/markvandermerwe/models/ICRA_Models/reconstruction/pointconv_mse_cf'
-_SAVE_PATH = '/home/markvandermerwe/data/ReconstructedMeshesTest/Real'
+_SPLITS_PATH = '/home/markvandermerwe/catkin_ws/src/ll4ma_3d_reconstruction/src/data_generation/data_split/test_fold.txt'
+_SAVE_PATH = 'out/test_dir/'
 _PCD_DATABASE = '/dataspace/ICRA_Data/PyrenderData/Depth/'
 _GRASP_DATABASE = False
 _OBJECT_FRAME = False
@@ -198,7 +194,7 @@ def mise_voxel(get_sdf, bound, initial_voxel_resolution, final_voxel_resolution,
 
 def get_test_meshes(grasp_database=True, ycb_database=False):
     meshes = set()
-    with open('/home/markvandermerwe/catkin_ws/src/ll4ma_3d_reconstruction/src/data_generation/data_split/test_fold.txt') as f:
+    with open(_SPLITS_PATH) as f:
         for view in f:
             if grasp_database and 'poisson' in view:
                 meshes.add('_'.join(view.split('_')[:-1]))
@@ -207,22 +203,16 @@ def get_test_meshes(grasp_database=True, ycb_database=False):
     
     fin_meshes = []
     for mesh in meshes:
-        fin_meshes.append(mesh + '_10')
+        fin_meshes.append(mesh + '_10') # Only use the 10th rendered view.
         
     return fin_meshes
-
-def get_real_pt_cld():
-    real_info = "/home/markvandermerwe/data/GraspTestData/recon_high/mustard_p1_a1/grasp_plan_info.pickle"
-    obj_dict = pickle.load(open(real_info))
-    return obj_dict['scaled_object_cloud'], (obj_dict['max_dim'] * (1.03/1.0)), obj_dict['scale'], [0,0,0]
         
 def mesh_objects(model_func, model_path, save_path, pcd_folder, grasp_database=True):
     # Setup model.
     get_sdf, get_embedding, _ = get_sdf_prediction(model_func, model_path)
 
     # Get names of partial views.
-    # meshes = get_test_meshes(grasp_database=grasp_database, ycb_database=(not grasp_database))
-    meshes = ["mustard_real"]
+    meshes = get_test_meshes(grasp_database=grasp_database, ycb_database=(not grasp_database))
     
     # Bounds of 3D space to evaluate in: [-bound, bound] in each dim.
     bound = 0.8
@@ -234,8 +224,7 @@ def mesh_objects(model_func, model_path, save_path, pcd_folder, grasp_database=T
     # Mesh the views.
     for mesh in tqdm(meshes):
         # Point cloud for this view.
-        # pc_, length, scale, centroid_diff = get_pcd(mesh, pcd_folder, object_frame=_OBJECT_FRAME, verbose=False);
-        pc_, length, scale, centroid_diff = get_real_pt_cld()
+        pc_, length, scale, centroid_diff = get_pcd(mesh, pcd_folder, object_frame=_OBJECT_FRAME, verbose=False);
         
         voxel_size = (2.*bound * length) / float(final_voxel_resolution)    
         if pc_ is None:
