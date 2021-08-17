@@ -28,11 +28,9 @@ Our code depends on the following python libraries:
  
 We additionally rely on PointConv for our embedding layers. PointConv should be cloned from [here](https://github.com/DylanWusee/pointconv) and their instructions should be followed to compile their custom TF operations. Additionally, the environment variable `POINTCONV_HOME` should be set to point at the pointconv repository folder.
 
-### Dataset:
+### Dataset/Models:
 
-You will need the following:
-1. [Training Data](https://uofu.box.com/s/3h7sfsdecso38kt811o23hv1pymu737y) (6.8GB) - train/validate/test folds of generated SDF data.
-2. [Raw Data](https://uofu.box.com/s/zqsqegonzc837rtgdxkdg0r8gq5i4ecy) (4.1GB) - Partial View data used to generate above.
+You can find relevant datasets and model checkpoint files [here](https://drive.google.com/drive/u/2/folders/1x_rXjnE2F7iemyIX_TWA0AyRvhCo8eT3).
 
 ### Usage:
 
